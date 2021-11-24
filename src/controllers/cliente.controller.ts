@@ -1,31 +1,54 @@
+import {service} from '@loopback/core';
 import {
   Count,
   CountSchema,
   Filter,
   FilterExcludingWhere,
   repository,
-  Where,
+  Where
 } from '@loopback/repository';
 import {
-  post,
-  param,
-  get,
-  getModelSchemaRef,
-  patch,
-  put,
-  del,
-  requestBody,
-  response,
+  del, get,
+  getModelSchemaRef, HttpErrors, param, patch, post, put, requestBody,
+  response
 } from '@loopback/rest';
-import {Cliente} from '../models';
+import {Cliente, Credenciales} from '../models'; //Modelo donde encontramos los datos del usuario y contraseña para realizar la autenticacion e idnetificacion del cliente
 import {ClienteRepository} from '../repositories';
+import {AutenticacionService} from '../services';
+const Fetch = require("node-fetch");
 
 export class ClienteController {
   constructor(
     @repository(ClienteRepository)
-    public clienteRepository : ClienteRepository,
-  ) {}
-
+    public clienteRepository: ClienteRepository,
+    @service(AutenticacionService) //se instancia el objeto de la clase autenticacionservice para acceder a los metodos q hay en ella
+    public servicioautenticacion: AutenticacionService,
+  ) { }
+  //Metodo post q identifica los usuarios de la app
+  @post("/IdentificacionCliente", { //se ejecuta en la pagina identificacion cliente
+    responses: {
+      '200': {     //se ejecuta mientras la respuesta sea 200
+        description: "Identificacion de los clientes" //Se muestra en el encabezado de la pagina
+      }
+    }
+  })
+  async IdentificacionCliente(
+    @requestBody() credenciales: Credenciales) { //Recibe las credenciales desde la pagina identificacion cliente y toda la informacion de la pagina debe ir en el body para poder utilizarla hacemos el request body
+    let p = await this.servicioautenticacion.IdentificarCliente(credenciales.Usuario, credenciales.Clave);
+    if (p) {
+      let token = this.servicioautenticacion.GenerarTokenJWT(p);
+      return {
+        data: {
+          nombre: p.Nombre,
+          correo: p.Correo,
+          id: p.id
+        },
+        tk: token
+      }
+    } else {
+      throw new HttpErrors[401]("los datos que esta suministrando no son validos");
+    }
+  }
   @post('/clientes')
   @response(200, {
     description: 'Cliente model instance',
@@ -44,7 +67,17 @@ export class ClienteController {
     })
     cliente: Omit<Cliente, 'id'>,
   ): Promise<Cliente> {
-    return this.clienteRepository.create(cliente);
+    let clave = this.servicioautenticacion.GenerarClave();
+    let cifrada = this.servicioautenticacion.CifrarClave(clave); //este metodo recibe una clave la cual se creaa en la linea anterior
+    cliente.Clave = cifrada
+    let x = await this.clienteRepository.create(cliente); //este codigo me espera a q le mande el return para enviar la informacion del cliente creado a la base de datos
+    // Notificacion al usuario
+    let destino = cliente.Correo;
+    let asunto = "Registro en la App TuCarroYa"
+    let contenido = `Hola, ${cliente.Nombre}, su usuario es: ${cliente.Correo}. La contraseña de acceso es: ${clave}` //String template `` tipo de dato q permite la combinacion de strings con los datos q se extraen desde alguna parte del programa
+    fetch(``) //Interpolacion de variables "${}" TODO
+
+    return x;
   }
 
   @get('/clientes/count')
